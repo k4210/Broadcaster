@@ -5,7 +5,8 @@
 #include <atomic>
 #include <thread>
 
-
+namespace
+{
 struct TestEvent
 {
     int value;
@@ -228,4 +229,6 @@ TEST(BroadcasterTest, UnregisterWhileCallbackIsRunning)
     broadcaster.broadcast({2});
 
     EXPECT_TRUE(listener.entered);
+}
+
 }

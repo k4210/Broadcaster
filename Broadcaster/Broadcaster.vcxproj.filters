@@ -15,10 +15,13 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="events.h">
+    <ClInclude Include="gtest\gtest.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="gtest\gtest.h">
+    <ClInclude Include="intrusive_list.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="events.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -27,6 +30,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="tests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="complex_tests.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

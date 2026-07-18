@@ -141,8 +141,10 @@
   <ItemGroup>
     <ClInclude Include="events.h" />
     <ClInclude Include="gtest\gtest.h" />
+    <ClInclude Include="intrusive_list.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="complex_tests.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="tests.cpp" />
   </ItemGroup>
