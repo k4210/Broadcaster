@@ -8,36 +8,27 @@
 
 namespace events
 {
-
-template<typename Event>
-struct Entry;
-
 template<typename Event>
 class Listener;
-
-template<typename Event>
-struct Connection
-{
-    typename std::list<Entry<Event>>::iterator iterator;
-};
 
 template<typename Event>
 struct Entry
 {
     Listener<Event>* listener = nullptr;
-    Connection<Event> connection;
     std::atomic<bool> active{true};
 };
 
 template<typename Event>
 class Broadcaster;
 
-
 template<typename Event>
 class Listener
 {
 public:
-    virtual ~Listener() = default;
+    virtual ~Listener()
+    {
+        assert(m_connection == nullptr);
+    }
 
     virtual void onEvent(const Event& event) = 0;
 
@@ -45,18 +36,15 @@ private:
     template<typename>
     friend class Broadcaster;
 
-    Connection<Event>* m_connection = nullptr;
+    Entry<Event>* m_connection = nullptr;
 };
-
 
 template<typename Event>
 class Broadcaster
 {
 private:
     using ListenerType = Listener<Event>;
-    using ConnectionType = Connection<Event>;
     using EntryType = Entry<Event>;
-
 
 public:
     Broadcaster() = default;
@@ -68,9 +56,7 @@ public:
     {
         cleanup();
         assert(!m_listeners.size());
-        assert(!m_pendingRemove.size());
     }
-
 
     void registerListener(ListenerType* listener)
     {
@@ -79,17 +65,18 @@ public:
 
         std::lock_guard lock(m_mutex);
 
+        assert(listener->m_connection == nullptr);
+
         m_listeners.emplace_back();
 
         auto iterator = std::prev(m_listeners.end());
 
         iterator->listener = listener;
-        iterator->connection.iterator = iterator;
         iterator->active.store(
             true,
             std::memory_order_release);
 
-        listener->m_connection = &iterator->connection;
+        listener->m_connection = &(*iterator);
     }
 
 
@@ -100,13 +87,13 @@ public:
 
         std::lock_guard lock(m_mutex);
 
-        ConnectionType* connection = listener->m_connection;
+        EntryType* connection = listener->m_connection;
 
         if (!connection)
             return;
 
         bool wasActive =
-            connection->iterator->active.exchange(
+            connection->active.exchange(
                 false,
                 std::memory_order_acq_rel);
 
@@ -124,36 +111,35 @@ public:
 
     void broadcast(const Event& event)
     {
-        std::vector<ConnectionType*> snapshot;
+        typename std::list<EntryType>::iterator firstIterator;
+        typename std::list<EntryType>::iterator lastIterator;
 
         {
             std::lock_guard lock(m_mutex);
+            cleanup();
+
+			if (!m_listeners.size())
+				return;
 
             m_broadcasting = true;
 
-            snapshot.reserve(m_listeners.size());
-
-            for (auto& entry : m_listeners)
-            {
-                if (entry.active.load(
-                        std::memory_order_acquire))
-                {
-                    snapshot.push_back(
-                        &entry.connection);
-                }
-            }
+            firstIterator = m_listeners.begin();
+			lastIterator = std::prev(m_listeners.end());
         }
 
-
-        for (ConnectionType* connection : snapshot)
+        auto it = firstIterator;
+        while (true)
         {
-            if (connection->iterator->active.load(
-                    std::memory_order_acquire))
+            if (it->active.load(std::memory_order_acquire))
             {
-                // Entry is still alive because cleanup is delayed
-                connection->iterator->listener
-                    ->onEvent(event);
+                // TODO: unsafe to destroy listener here.
+
+                it->listener->onEvent(event);
             }
+
+            if (it == lastIterator)
+				break;
+            ++it;
         }
 
 
@@ -169,9 +155,13 @@ private:
 
     void cleanup()
     {
-        for (ConnectionType* connection : m_pendingRemove)
+        for (EntryType* connection : m_pendingRemove)
         {
-            m_listeners.erase(connection->iterator);
+            // TODO: optimize
+
+            m_listeners.remove_if([connection](const EntryType& entry) {
+                return &entry == connection;
+            });
         }
 
         m_pendingRemove.clear();
@@ -180,8 +170,9 @@ private:
 
     std::mutex m_mutex;
 
+    // TODO: optimize - less allocations
     std::list<EntryType> m_listeners;
-    std::vector<ConnectionType*> m_pendingRemove;
+    std::vector<EntryType*> m_pendingRemove;
 
     // Protected by m_mutex
     bool m_broadcasting = false;
