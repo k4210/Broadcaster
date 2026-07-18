@@ -44,10 +44,10 @@ inline bool RunAllTests() {
 } // namespace testing
 
 #define EXPECT_EQ(a,b) \
-	do { auto _a = (a); auto _b = (b); if (!((_a) == (_b))) { std::cerr << "EXPECT_EQ failed: " << #a << " vs " << #b << " (" << ::testing::PrintValue(_a) << " vs " << ::testing::PrintValue(_b) << ")\n"; ::testing::current_test_failed = true; } } while(0)
+	do { auto _a = (a); auto _b = (b); if (!((_a) == (_b))) { std::cerr << "EXPECT_EQ failed: " << #a << " vs " << #b << " (" << ::testing::PrintValue(_a) << " vs " << ::testing::PrintValue(_b) << ")\n"; ::testing::current_test_failed = true; __debugbreak(); } } while(0)
 
 #define EXPECT_TRUE(x) \
-	do { if (!(x)) { std::cerr << "EXPECT_TRUE failed: " << #x << "\n"; ::testing::current_test_failed = true; } } while(0)
+	do { if (!(x)) { std::cerr << "EXPECT_TRUE failed: " << #x << "\n"; ::testing::current_test_failed = true; __debugbreak(); } } while(0)
 
 #define TEST(suite,name) \
 	static void GTest_##suite##_##name(); \

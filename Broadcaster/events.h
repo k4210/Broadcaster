@@ -165,6 +165,7 @@ public:
             return;
 
         cleanup();
+
         for (auto& entry : m_listeners)
         {
             entry.connection.active.store(

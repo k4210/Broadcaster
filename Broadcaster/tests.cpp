@@ -162,13 +162,14 @@ TEST(BroadcasterTest, ClearRemovesAllListeners)
 
     broadcaster.registerListener(&a);
     broadcaster.registerListener(&b);
+    broadcaster.unregisterListener(&a);
 
     broadcaster.clear();
 
     broadcaster.broadcast({1});
 
     EXPECT_EQ(a.count, 0);
-    EXPECT_EQ(b.count, 0);
+    EXPECT_EQ(b.count, 1);
 }
 
 
