@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="Broadcaster/Broadcaster.vcxproj" />
+  <Project Path="Broadcaster/Broadcaster.vcxproj" Id="cb4ba8b0-78be-4faa-8700-630396ae770f" />
 </Solution>

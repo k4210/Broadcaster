@@ -4,6 +4,7 @@
 #include <list>
 #include <mutex>
 #include <vector>
+#include <assert.h>
 
 namespace events
 {
@@ -18,7 +19,6 @@ template<typename Event>
 struct Connection
 {
     typename std::list<Entry<Event>>::iterator iterator;
-    std::atomic<bool> active{true};
 };
 
 template<typename Event>
@@ -26,6 +26,7 @@ struct Entry
 {
     Listener<Event>* listener = nullptr;
     Connection<Event> connection;
+    std::atomic<bool> active{true};
 };
 
 template<typename Event>
@@ -63,6 +64,13 @@ public:
     Broadcaster(const Broadcaster&) = delete;
     Broadcaster& operator=(const Broadcaster&) = delete;
 
+    ~Broadcaster()
+    {
+        cleanup();
+        assert(!m_listeners.size());
+        assert(!m_pendingRemove.size());
+    }
+
 
     void registerListener(ListenerType* listener)
     {
@@ -77,7 +85,7 @@ public:
 
         iterator->listener = listener;
         iterator->connection.iterator = iterator;
-        iterator->connection.active.store(
+        iterator->active.store(
             true,
             std::memory_order_release);
 
@@ -98,7 +106,7 @@ public:
             return;
 
         bool wasActive =
-            connection->active.exchange(
+            connection->iterator->active.exchange(
                 false,
                 std::memory_order_acq_rel);
 
@@ -127,7 +135,7 @@ public:
 
             for (auto& entry : m_listeners)
             {
-                if (entry.connection.active.load(
+                if (entry.active.load(
                         std::memory_order_acquire))
                 {
                     snapshot.push_back(
@@ -139,7 +147,7 @@ public:
 
         for (ConnectionType* connection : snapshot)
         {
-            if (connection->active.load(
+            if (connection->iterator->active.load(
                     std::memory_order_acquire))
             {
                 // Entry is still alive because cleanup is delayed
@@ -156,30 +164,6 @@ public:
             cleanup();
         }
     }
-
-
-    void clear()
-    {
-        std::lock_guard lock(m_mutex);
-        if (!m_broadcasting)
-            return;
-
-        cleanup();
-
-        for (auto& entry : m_listeners)
-        {
-            entry.connection.active.store(
-                false,
-                std::memory_order_release);
-
-            m_pendingRemove.push_back(
-                &entry.connection);
-        }
-
-        cleanup();
-            
-    }
-
 
 private:
 
