@@ -40,12 +40,13 @@ class Listener : public IntrusiveListNode
 public:
 	virtual ~Listener()
 	{
-	    assert(m_status.load(std::memory_order_relaxed) == ListenerStatus::disconnected);
+	    assert(status() == ListenerStatus::disconnected);
 	}
 
-    virtual void onEvent(const Event& event) = 0;
-
     ListenerStatus status() const { return m_status.load(std::memory_order_relaxed); }
+
+protected:
+    virtual void onEvent(const Event& event) = 0;
 
 	// Keep them short, they are called under lock.
     virtual void onConnect() 
@@ -59,8 +60,7 @@ public:
     }
 
 private:
-    template<typename>
-    friend class Broadcaster;
+    friend Broadcaster<Event>;
 
 	std::atomic<ListenerStatus> m_status = ListenerStatus::disconnected;
 };
@@ -79,13 +79,13 @@ public:
 
     ~Broadcaster()
     {
-        cleanup();
+        assert(!m_pendingRemove.size());
         assert(!m_listeners.size());
     }
 
     // NOTES:
-	// Listener registered during broadcast, will not receive the current event.
-	// Listener unregistered during broadcast, will not receive the current event (if not received yet).
+	// When Listener is registered during a broadcast, it will not receive the current event.
+	// When Listener is unregistered during a broadcast, it will not receive the current event (if not received yet).
 	// When Listener is unregistered during a broadcast, it cannot be immediately destroyed (or registered again), it must wait until the broadcast is finished. 
 
     // THREAD SAFE
@@ -139,7 +139,7 @@ public:
 
         {
 			std::lock_guard lock(m_mutex);
-			cleanup();
+			assert(!m_pendingRemove.size());
 
 			if (m_listeners.empty())
 				return;
@@ -151,25 +151,28 @@ public:
 			lastListener = m_listeners.tail();
         }
 
-        auto it = firstListener;
-        while (true)
+        for (auto it = firstListener; true; it = static_cast<ListenerType*>(it->next()))
         {
-            if (it->m_status.load(std::memory_order_acquire) == ListenerStatus::connected)
+            assert(it);
+            if (it->status() == ListenerStatus::connected)
             {
                 it->onEvent(event);
             }
 
             if (it == lastListener)
 				break;
-            it = static_cast<ListenerType*>(it->next());
-            assert(it);
         }
 
         {
             std::lock_guard lock(m_mutex);
-
             m_broadcasting = false;
-            cleanup();
+            
+            for (ListenerType* listener : m_pendingRemove)
+            {
+                assert(listener->status() == ListenerStatus::ongoing_disconnect);
+                disconnect(listener);
+            }
+            m_pendingRemove.clear();
         }
     }
 
@@ -181,23 +184,9 @@ private:
         listener->onDisconnect();
 	}
 
-    void cleanup()
-    {
-        for (ListenerType* listener : m_pendingRemove)
-        {
-            assert(listener->status() == ListenerStatus::ongoing_disconnect);
-            disconnect(listener);
-        }
-
-        m_pendingRemove.clear();
-    }
-
     std::mutex m_mutex;
-
     IntrusiveList<ListenerType> m_listeners;
     std::vector<ListenerType*> m_pendingRemove;
-
-    // Protected by m_mutex
     bool m_broadcasting = false;
 };
 
